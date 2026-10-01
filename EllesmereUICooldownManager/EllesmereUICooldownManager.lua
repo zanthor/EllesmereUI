@@ -3004,6 +3004,7 @@ local function StopProcGlow(icon)
         ns.QueueCDGlowResourceCheck()
     end
 end
+ns.ShowProcGlow = ShowProcGlow
 
 -- Install hooks on ActionButtonSpellAlertManager (called once during init)
 local _procGlowHooksInstalled = false
@@ -3025,6 +3026,24 @@ local function InstallProcGlowHooks()
         -- Apply immediately: no defer needed, icon mapping is current from the last reanchor.
         local ourIcon = FindOurIconForBlizzChild(barKey, cdmChild)
         if not ourIcon then return end
+
+        -- Glow (On CD) is specifically about the cooldown window; Blizzard's
+        -- own alert for this ability (e.g. Tiger Eye Brew reaching 25 stacks)
+        -- is only meaningful once it's actually castable again, but can fire
+        -- while still on cooldown. Defer taking the overlay while our on-cd
+        -- glow is legitimately showing -- the cd-state evaluators apply the
+        -- deferred alert themselves the instant the cooldown clears.
+        local fd = _getFD(ourIcon)
+        if fd and fd._cdStateGlowOn then
+            local fc = _ecmeFC[ourIcon]
+            local sid, bk = fc and fc.spellID, fc and fc.barKey
+            local ss = sid and bk and ns.ResolveSpellSettings
+                and ns.ResolveSpellSettings(ourIcon, sid, ns.GetBarSpellData(bk), bk)
+            if ss and ns.GetSpellCdStateEffect(ourIcon, ss) == "glowOnCD" then
+                fd._pendingProcGlow = true
+                return
+            end
+        end
         ShowProcGlow(ourIcon)
         -- Force texture re-evaluation so override textures apply immediately
         FC(ourIcon).lastTex = nil
@@ -3036,6 +3055,12 @@ local function InstallProcGlowHooks()
         if not barKey or not cdmChild then return end
         local ourIcon = FindOurIconForBlizzChild(barKey, cdmChild)
         local fd = ourIcon and _getFD(ourIcon)
+        if fd and fd._pendingProcGlow then
+            -- Blizzard retracted the alert before the deferred on-cd window ever
+            -- cleared -- we never actually took the overlay, so there's nothing to stop.
+            fd._pendingProcGlow = false
+            return
+        end
         if not ourIcon or not (fd and fd.procGlowActive) then return end
 
         -- Trust Blizzard's HideAlert: stop immediately. A re-fired ShowAlert during an internal refresh restarts the glow next frame.

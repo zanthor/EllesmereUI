@@ -2790,6 +2790,18 @@ local function EvalCdStateChargeFrame(frame, fd)
         nil, ssw.chargeHideUntilSpent)
 end
 
+-- Apply a Blizzard alert (e.g. Tiger Eye Brew at 25 stacks) that ShowAlert
+-- deferred while Glow (On CD) was legitimately showing (CooldownManager.lua's
+-- ShowAlert hook sets fd._pendingProcGlow instead of taking the overlay
+-- immediately). Called from every place the on-cd glow turns itself off, so
+-- Blizzard's alert takes over the exact instant the cooldown clears instead of
+-- fighting our glow for the whole cooldown window.
+function ns.ReleasePendingProcGlow(frame, fd)
+    if not (fd and fd._pendingProcGlow) then return end
+    fd._pendingProcGlow = false
+    if ns.ShowProcGlow then ns.ShowProcGlow(frame) end
+end
+
 -- Register an icon whose resolved effect is Hidden (CD Ready) (callers check)
 -- when its spell has charges; non-charge spells never enter the set, their real
 -- CD-end edge fires the desat hook. Called from that hook (on spell rebinding)
@@ -4308,6 +4320,7 @@ local function DecorateFrame(frame, barData)
                             ns.StopCdGlow(fd)
                             fd._cdStateGlowOn = false
                         end
+                        fd._pendingProcGlow = false
                     end
                     if not onCD then
                         -- procGlowActive gate: the proc glow shares this
@@ -4335,6 +4348,7 @@ local function DecorateFrame(frame, barData)
                             ns.StopCdGlow(fd)
                             fd._cdStateGlowOn = false
                         end
+                        fd._pendingProcGlow = false
                     end
                     -- Track this frame for the event-driven re-evaluation loop.
                     -- The loop's events stay unregistered until the first watch,
@@ -4386,6 +4400,7 @@ local function DecorateFrame(frame, barData)
                             elseif fd._cdStateGlowOn then
                                 ns.StopCdGlow(fd)
                                 fd._cdStateGlowOn = false
+                                ns.ReleasePendingProcGlow(frame, fd)
                             end
                         end)
                     end
@@ -4407,6 +4422,7 @@ local function DecorateFrame(frame, barData)
                             ns.StopCdGlow(fd)
                             fd._cdStateGlowOn = false
                         end
+                        fd._pendingProcGlow = false
                     end
                     if onCD then
                         if fd.glowOverlay and not fd._cdStateGlowOn
@@ -4419,6 +4435,7 @@ local function DecorateFrame(frame, barData)
                     elseif fd._cdStateGlowOn then
                         ns.StopCdGlow(fd)
                         fd._cdStateGlowOn = false
+                        ns.ReleasePendingProcGlow(frame, fd)
                     end
                 end
             end)
@@ -5038,6 +5055,7 @@ do
                             ns.StopCdGlow(fd)
                             fd._cdStateGlowOn = false
                         end
+                        fd._pendingProcGlow = false
                     end
                     local liveSid = sid2
                     if C_SpellBook and C_SpellBook.FindSpellOverrideByID then
@@ -5076,6 +5094,7 @@ do
                     elseif fd._cdStateGlowOn then
                         ns.StopCdGlow(fd)
                         fd._cdStateGlowOn = false
+                        ns.ReleasePendingProcGlow(frame, fd)
                     end
                 end
             end
